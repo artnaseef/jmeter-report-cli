@@ -22,9 +22,13 @@ import org.jfree.data.xy.XYSeriesCollection;
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintStream;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -39,11 +43,26 @@ public class HitsPerSecondReport {
 
   private SAXParseHandler handler = new SAXParseHandler();
 
+  private OptionParser optionParser;
+
+  private String outputFile = "hitsPerSecond.png";
+  private String detailOutputFile;
+
+  private int reportWidth = 1000;
+  private int reportHeight = 750;
+
   private long sampleCount;
   private XYSeriesCollection dataset;
   private JFreeChart chart;
   private XYSeries hitsSeries;
   private Map<Long, Long> hitsPerSecond;
+
+  private long timeSlotSize = 1000; // In milliseconds
+
+  private long startTimestampSlot = -1;
+  private long endTimestampSlot = -1;
+
+  private PrintStream detailFileWriter;
 
   public static void main(String[] args) {
     HitsPerSecondReport mainObj = new HitsPerSecondReport();
@@ -52,36 +71,123 @@ public class HitsPerSecondReport {
   }
 
   public void instanceMain(String[] args) {
-    this.dataset = new XYSeriesCollection();
-
-    if (args.length < 1) {
-      System.err.println("Usage: HitsPerSecond <source-url>");
-      System.exit(1);
-    }
-
-    String uri = args[0];
-    this.hitsSeries = new XYSeries("Hits");
-    this.hitsPerSecond = new TreeMap<Long, Long>();
-
     try {
-      this.parse(uri);
+      List<?> nonOptionArgs = this.parseCommandLine(args);
 
-      this.populateSeries();
+      this.dataset = new XYSeriesCollection();
 
-      this.dataset.addSeries(this.hitsSeries);
-      this.createChart();
-      ExportUtils.writeAsPNG(this.chart, 1000, 750, new File("hitsPerSecond.png"));
+      if (nonOptionArgs.size() < 1) {
+        this.printUsage(System.err);
+        System.exit(1);
+      }
+      if (this.detailOutputFile != null) {
+        this.detailFileWriter = new PrintStream(this.detailOutputFile);
+      }
+
+      for ( Object oneSource : nonOptionArgs ) {
+        this.generateReportForSource(oneSource.toString());
+      }
     } catch (Exception exc) {
       exc.printStackTrace();
     }
   }
 
-  protected void populateSeries () {
-    for ( Map.Entry<Long, Long> hitCountSeconds : this.hitsPerSecond.entrySet() ) {
-      System.out.println(Long.toString(hitCountSeconds.getKey()) + "|" +
-                         hitCountSeconds.getValue());
+  protected void generateReportForSource (String uri) throws Exception {
+    this.hitsSeries = new XYSeries("Hits");
+    this.hitsPerSecond = new TreeMap<Long, Long>();
 
-      this.hitsSeries.add(hitCountSeconds.getKey(), hitCountSeconds.getValue());
+    this.parseJtlFile(uri);
+
+    this.populateSeries(uri);
+    this.dataset.addSeries(this.hitsSeries);
+    this.createChart();
+
+    ExportUtils.writeAsPNG(this.chart, this.reportWidth, this.reportHeight,
+                           new File(this.outputFile));
+  }
+
+  protected List<?> parseCommandLine (String[] args) throws Exception {
+    this.optionParser = new OptionParser("hd:H:o:s:W:");
+
+    this.optionParser.accepts("h", "display this usage");
+
+    this.optionParser.accepts("d", "generate detailed sample output")
+      .withRequiredArg().ofType(String.class)
+      .describedAs("filename");
+
+    this.optionParser.accepts("H", "height of the generated report")
+        .withRequiredArg().ofType(Integer.class);
+
+    this.optionParser.accepts("o", "output report filename (default = " + this.outputFile + ")")
+        .withRequiredArg().ofType(String.class)
+        .describedAs("filename");
+
+    this.optionParser.accepts("s", "slot size, in milliseconds")
+        .withRequiredArg().ofType(Long.class);
+
+    this.optionParser.accepts("W", "width of the generated report")
+        .withRequiredArg().ofType(Integer.class);
+
+    try {
+      OptionSet options = optionParser.parse(args);
+
+      if (options.has("h")) {
+        this.printUsage(System.out);
+        System.exit(0);
+      }
+
+      if (options.has("d")) {
+        this.detailOutputFile = (String) options.valueOf("d");
+      }
+
+      if (options.has("H")) {
+        this.reportHeight = (Integer) options.valueOf("H");
+      }
+
+      if (options.has("o")) {
+        this.outputFile = (String) options.valueOf("o");
+      }
+
+      if (options.has("s")) {
+        this.timeSlotSize = (Long) options.valueOf("s");
+      }
+
+      if (options.has("W")) {
+        this.reportWidth = (Integer) options.valueOf("W");
+      }
+
+      return  options.nonOptionArguments();
+    } catch ( Exception exc ) {
+      this.printUsage(System.err);
+      System.err.println();
+
+      throw exc;
+    }
+  }
+
+  protected void printUsage (PrintStream out) {
+    out.println("Usage: HitsPerSecond [options] <source-url>");
+
+    try {
+      optionParser.printHelpOn(out);
+    } catch (IOException e) {
+      // Ignore this one - if help can't be printed, what's left to do?
+    }
+  }
+
+  protected void populateSeries (String sourceUri) {
+    for ( Map.Entry<Long, Long> hitCountSeconds : this.hitsPerSecond.entrySet() ) {
+      long xPoint = this.calculateXAxisOffset(hitCountSeconds.getKey());
+      long yPoint = hitCountSeconds.getValue();
+
+      this.hitsSeries.add(xPoint, yPoint);
+
+      if ( this.detailFileWriter != null ) {
+        this.detailFileWriter.println(sourceUri + "|" + hitCountSeconds.getKey() +
+                                      "|" + hitCountSeconds.getValue() +
+                                      "|" + xPoint +
+                                      "|" + yPoint);
+      }
     }
   }
 
@@ -97,32 +203,9 @@ public class HitsPerSecondReport {
         true,                     // tooltips
         false                     // urls
     );
-
-//    // NOW DO SOME OPTIONAL CUSTOMISATION OF THE CHART...
-//    chart.setBackgroundPaint(Color.white);
-//
-////        final StandardLegend legend = (StandardLegend) chart.getLegend();
-//    //      legend.setDisplaySeriesShapes(true);
-//
-//    // get a reference to the plot for further customisation...
-//    final XYPlot plot = chart.getXYPlot();
-//    plot.setBackgroundPaint(Color.lightGray);
-//    //    plot.setAxisOffset(new Spacer(Spacer.ABSOLUTE, 5.0, 5.0, 5.0, 5.0));
-//    plot.setDomainGridlinePaint(Color.white);
-//    plot.setRangeGridlinePaint(Color.white);
-//
-//    final XYLineAndShapeRenderer renderer = new XYLineAndShapeRenderer();
-//    renderer.setSeriesLinesVisible(0, false);
-//    renderer.setSeriesShapesVisible(1, false);
-//    plot.setRenderer(renderer);
-//
-//    // change the auto tick unit selection to integer units only...
-//    final NumberAxis rangeAxis = (NumberAxis) plot.getRangeAxis();
-//    rangeAxis.setStandardTickUnits(NumberAxis.createIntegerTickUnits());
-//    // OPTIONAL CUSTOMISATION COMPLETED.
   }
 
-  protected void parse(String uri) throws ParserConfigurationException, SAXException, IOException {
+  protected void parseJtlFile(String uri) throws ParserConfigurationException, SAXException, IOException {
     SAXParserFactory factory = SAXParserFactory.newInstance();
     SAXParser parser;
 
@@ -135,15 +218,33 @@ public class HitsPerSecondReport {
 
   protected void addSample (long timestamp) {
     long newCount = 1;
-    long timeStampSec = timestamp / 1000;
-    Long existingCount = this.hitsPerSecond.get(timeStampSec);
+    long timeStampSlot = normalizeTimestamp(timestamp);
+    Long existingCount = this.hitsPerSecond.get(timeStampSlot);
 
     if ( existingCount != null ) {
       newCount += existingCount;
     }
 
-    this.hitsPerSecond.put(timeStampSec, newCount);
+    this.hitsPerSecond.put(timeStampSlot, newCount);
     this.sampleCount++;
+
+    if ( ( this.startTimestampSlot == -1 ) || ( timeStampSlot < this.startTimestampSlot) ) {
+      this.startTimestampSlot = timeStampSlot;
+    }
+
+    if ( ( this.endTimestampSlot == -1 ) || ( timeStampSlot > this.endTimestampSlot) ) {
+      this.endTimestampSlot = timeStampSlot;
+    }
+  }
+
+  protected long  normalizeTimestamp (long timestamp) {
+    return  timestamp / this.timeSlotSize;
+  }
+
+  protected long  calculateXAxisOffset (long timestampSlot) {
+    long result = timestampSlot - this.startTimestampSlot;
+
+    return  result;
   }
 
   protected class SAXParseHandler extends DefaultHandler {
@@ -152,8 +253,6 @@ public class HitsPerSecondReport {
     @Override
     public void startElement(String uri, String localName, String qName, Attributes attributes)
         throws SAXException {
-
-//      System.out.println("START: name=" + localName + ", qName=" + qName);
 
       if ( level >= 2 ) {
         if (qName.equals("sample") || qName.equals("httpSample")) {
@@ -164,21 +263,11 @@ public class HitsPerSecondReport {
       }
 
       this.level++;
-//      this.printAttributes(attributes);
     }
 
     @Override
     public void endElement(String uri, String localName, String qName) throws SAXException {
       this.level--;
-//      System.out.println("END: name=" + localName + ", qName=" + qName);
-    }
-
-    protected void printAttributes(Attributes attributes) {
-      int iter = 0;
-      while ( iter < attributes.getLength() ) {
-        System.out.println("  > " + attributes.getQName(iter) + "=" + attributes.getValue(iter));
-        iter++;
-      }
     }
   }
 }
