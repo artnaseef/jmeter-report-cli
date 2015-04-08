@@ -39,7 +39,7 @@ import javax.xml.parsers.SAXParserFactory;
 /**
  * Created by art on 4/7/15.
  */
-public class HitsPerSecondReport {
+public class HitsPerSecondReport implements LaunchableReport {
 
   private SAXParseHandler handler = new SAXParseHandler();
 
@@ -67,28 +67,29 @@ public class HitsPerSecondReport {
   public static void main(String[] args) {
     HitsPerSecondReport mainObj = new HitsPerSecondReport();
 
-    mainObj.instanceMain(args);
+    try {
+      mainObj.launchReport(args);
+    } catch ( Exception exc ) {
+      exc.printStackTrace();
+    }
   }
 
-  public void instanceMain(String[] args) {
-    try {
-      List<?> nonOptionArgs = this.parseCommandLine(args);
+  @Override
+  public void launchReport(String[] args) throws Exception {
+    List<?> nonOptionArgs = this.parseCommandLine(args);
 
-      this.dataset = new XYSeriesCollection();
+    this.dataset = new XYSeriesCollection();
 
-      if (nonOptionArgs.size() < 1) {
-        this.printUsage(System.err);
-        System.exit(1);
-      }
-      if (this.detailOutputFile != null) {
-        this.detailFileWriter = new PrintStream(this.detailOutputFile);
-      }
+    if (nonOptionArgs.size() < 1) {
+      this.printUsage(System.err);
+      System.exit(1);
+    }
+    if (this.detailOutputFile != null) {
+      this.detailFileWriter = new PrintStream(this.detailOutputFile);
+    }
 
-      for ( Object oneSource : nonOptionArgs ) {
-        this.generateReportForSource(oneSource.toString());
-      }
-    } catch (Exception exc) {
-      exc.printStackTrace();
+    for (Object oneSource : nonOptionArgs) {
+      this.generateReportForSource(oneSource.toString());
     }
   }
 
