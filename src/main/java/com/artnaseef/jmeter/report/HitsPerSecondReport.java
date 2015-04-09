@@ -36,8 +36,6 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.parsers.SAXParser;
-import javax.xml.parsers.SAXParserFactory;
 
 /**
  * Created by art on 4/7/15.

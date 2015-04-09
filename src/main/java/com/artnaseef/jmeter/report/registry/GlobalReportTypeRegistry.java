@@ -16,6 +16,7 @@ package com.artnaseef.jmeter.report.registry;
 
 import com.artnaseef.jmeter.report.HitsPerSecondReport;
 import com.artnaseef.jmeter.report.ResultCodesPerSecondReport;
+import com.artnaseef.jmeter.report.SamplesByLabelStatusReport;
 
 /**
  * Created by art on 4/8/15.
@@ -36,6 +37,10 @@ public abstract class GlobalReportTypeRegistry {
         registry.registerReportType("ResultCodesPerSecond", new ResultCodesPerSecondReport());
         registry.registerAlias("rcps", "ResultCodesPerSecond");
         registry.registerAlias("result-codes-per-second", "ResultCodesPerSecond");
+
+        registry.registerReportType("SamplesByLabelStatus", new SamplesByLabelStatusReport());
+        registry.registerAlias("sbls", "SamplesByLabelStatus");
+        registry.registerAlias("samples-by-label-status", "SamplesByLabelStatus");
     }
 
     public static ReportTypeRegistry get() {

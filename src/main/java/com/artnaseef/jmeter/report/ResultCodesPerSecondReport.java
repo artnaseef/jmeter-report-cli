@@ -22,9 +22,7 @@ import org.jfree.chart.plot.PlotOrientation;
 import org.jfree.chart.util.ExportUtils;
 import org.jfree.data.xy.XYSeries;
 import org.jfree.data.xy.XYSeriesCollection;
-import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
-import org.xml.sax.helpers.DefaultHandler;
 
 import java.io.File;
 import java.io.IOException;
@@ -35,8 +33,6 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.parsers.SAXParser;
-import javax.xml.parsers.SAXParserFactory;
 
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
