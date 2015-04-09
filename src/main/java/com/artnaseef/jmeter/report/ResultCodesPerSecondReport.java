@@ -13,6 +13,9 @@
  */
 package com.artnaseef.jmeter.report;
 
+import com.artnaseef.jmeter.report.jtl.JTLFileParseListener;
+import com.artnaseef.jmeter.report.jtl.JTLFileParser;
+import com.artnaseef.jmeter.report.jtl.model.Sample;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.JFreeChart;
 import org.jfree.chart.plot.PlotOrientation;
@@ -43,8 +46,6 @@ import joptsimple.OptionSet;
  */
 public class ResultCodesPerSecondReport implements LaunchableReport {
 
-    private SAXParseHandler handler = new SAXParseHandler();
-
     private OptionParser optionParser;
 
     private String outputFile = "resultCodesPerSecond.png";
@@ -69,10 +70,17 @@ public class ResultCodesPerSecondReport implements LaunchableReport {
 
     private PrintStream detailFileWriter;
 
+    private JTLFileParser jtlFileParser;
+
     public static void main(String[] args) {
         ResultCodesPerSecondReport mainObj = new ResultCodesPerSecondReport();
 
         mainObj.instanceMain(args);
+    }
+
+    public ResultCodesPerSecondReport() {
+        this.jtlFileParser = new JTLFileParser();
+        this.jtlFileParser.setListener(new MyJTLParseListener());
     }
 
     public void instanceMain(String[] args) {
@@ -237,26 +245,21 @@ public class ResultCodesPerSecondReport implements LaunchableReport {
     }
 
     protected void parseJtlFile(String uri) throws ParserConfigurationException, SAXException, IOException {
-        SAXParserFactory factory = SAXParserFactory.newInstance();
-        SAXParser parser;
-
-        parser = factory.newSAXParser();
-
-        parser.parse(uri, this.handler);
+        this.jtlFileParser.parse(uri);
 
         System.out.println("sample-count=" + this.sampleCount);
     }
 
-    protected void addSample(int resultCode, long timestamp) {
-        Map<Long, Long> slotSamples = this.resultCodesPerSecond.get(resultCode);
+    protected void addSample(Sample oneSample) {
+        Map<Long, Long> slotSamples = this.resultCodesPerSecond.get(oneSample.getResultCode());
 
         if (slotSamples == null) {
             slotSamples = new TreeMap<>();
-            this.resultCodesPerSecond.put(resultCode, slotSamples);
+            this.resultCodesPerSecond.put(oneSample.getResultCode(), slotSamples);
         }
 
         long newCount = 1;
-        long timeStampSlot = normalizeTimestamp(timestamp);
+        long timeStampSlot = normalizeTimestamp(oneSample.getTimestamp());
         Long existingCount = slotSamples.get(timeStampSlot);
 
         if (existingCount != null) {
@@ -285,43 +288,25 @@ public class ResultCodesPerSecondReport implements LaunchableReport {
         return result;
     }
 
-    protected class SAXParseHandler extends DefaultHandler {
-        private int level = 0;
-
+    protected class MyJTLParseListener implements JTLFileParseListener {
         @Override
-        public void startElement(String uri, String localName, String qName, Attributes attributes)
-                throws SAXException {
+        public void onSample(Sample fullSample) {
+            processSubSamples(fullSample);
+        }
 
-            if (level >= 2) {
-                if (qName.equals("sample") || qName.equals("httpSample")) {
-                    long timestamp = Long.valueOf(attributes.getValue("ts"));
-                    String resultCodeStr = attributes.getValue("rc");
+        protected long processSubSamples (Sample topLevelSample) {
+            int result = 0;
 
-                    if ((resultCodeStr != null) && (!resultCodeStr.isEmpty())) {
-                        int resultCode = decodeResultCodeString(resultCodeStr);
-
-                        addSample(resultCode, timestamp);
-                    }
+            List<Sample> subSamples = topLevelSample.getSubSamples();
+            if ( ( subSamples != null ) && ( ! subSamples.isEmpty() ) ) {
+                for ( Sample oneSub : subSamples ) {
+                    processSubSamples(oneSub);
                 }
+            } else {
+                addSample(topLevelSample);
             }
 
-            this.level++;
-        }
-
-        @Override
-        public void endElement(String uri, String localName, String qName) throws SAXException {
-            this.level--;
-        }
-
-        protected int decodeResultCodeString(String rcString) {
-            int result = -1;
-            try {
-                result = Integer.valueOf(rcString);
-            } catch (NumberFormatException nfExc) {
-                // Return the default
-            }
-
-            return result;
+            return  result;
         }
     }
 }

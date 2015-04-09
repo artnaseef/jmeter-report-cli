@@ -13,6 +13,9 @@
  */
 package com.artnaseef.jmeter.report;
 
+import com.artnaseef.jmeter.report.jtl.JTLFileParseListener;
+import com.artnaseef.jmeter.report.jtl.JTLFileParser;
+import com.artnaseef.jmeter.report.jtl.model.Sample;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.JFreeChart;
 import org.jfree.chart.plot.PlotOrientation;
@@ -41,8 +44,6 @@ import javax.xml.parsers.SAXParserFactory;
  */
 public class HitsPerSecondReport implements LaunchableReport {
 
-  private SAXParseHandler handler = new SAXParseHandler();
-
   private OptionParser optionParser;
 
   private String outputFile = "hitsPerSecond.png";
@@ -64,6 +65,8 @@ public class HitsPerSecondReport implements LaunchableReport {
 
   private PrintStream detailFileWriter;
 
+  private JTLFileParser jtlFileParser;
+
   public static void main(String[] args) {
     HitsPerSecondReport mainObj = new HitsPerSecondReport();
 
@@ -74,7 +77,12 @@ public class HitsPerSecondReport implements LaunchableReport {
     }
   }
 
-  @Override
+  public HitsPerSecondReport() {
+    this.jtlFileParser = new JTLFileParser();
+    this.jtlFileParser.setListener(new MyJTLParseListener());
+  }
+
+    @Override
   public void launchReport(String[] args) throws Exception {
     List<?> nonOptionArgs = this.parseCommandLine(args);
 
@@ -207,19 +215,14 @@ public class HitsPerSecondReport implements LaunchableReport {
   }
 
   protected void parseJtlFile(String uri) throws ParserConfigurationException, SAXException, IOException {
-    SAXParserFactory factory = SAXParserFactory.newInstance();
-    SAXParser parser;
+      this.jtlFileParser.parse(uri);
 
-    parser = factory.newSAXParser();
-
-    parser.parse(uri, this.handler);
-
-    System.out.println("sample-count=" + this.sampleCount);
+      System.out.println("sample-count=" + this.sampleCount);
   }
 
-  protected void addSample (long timestamp) {
+  protected void addSample (Sample sample) {
     long newCount = 1;
-    long timeStampSlot = normalizeTimestamp(timestamp);
+    long timeStampSlot = normalizeTimestamp(sample.getTimestamp());
     Long existingCount = this.hitsPerSecond.get(timeStampSlot);
 
     if ( existingCount != null ) {
@@ -248,27 +251,25 @@ public class HitsPerSecondReport implements LaunchableReport {
     return  result;
   }
 
-  protected class SAXParseHandler extends DefaultHandler {
-    private int level = 0;
-
-    @Override
-    public void startElement(String uri, String localName, String qName, Attributes attributes)
-        throws SAXException {
-
-      if ( level >= 2 ) {
-        if (qName.equals("sample") || qName.equals("httpSample")) {
-          long timestamp = Long.valueOf(attributes.getValue("ts"));
-
-          addSample(timestamp);
+    protected class MyJTLParseListener implements JTLFileParseListener {
+        @Override
+        public void onSample(Sample fullSample) {
+            processSubSamples(fullSample);
         }
-      }
 
-      this.level++;
-    }
+        protected long processSubSamples (Sample topLevelSample) {
+            int result = 0;
 
-    @Override
-    public void endElement(String uri, String localName, String qName) throws SAXException {
-      this.level--;
+            List<Sample> subSamples = topLevelSample.getSubSamples();
+            if ( ( subSamples != null ) && ( ! subSamples.isEmpty() ) ) {
+                for ( Sample oneSub : subSamples ) {
+                    processSubSamples(oneSub);
+                }
+            } else {
+                addSample(topLevelSample);
+            }
+
+            return  result;
+        }
     }
-  }
 }
