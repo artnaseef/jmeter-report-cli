@@ -24,19 +24,19 @@ import java.util.List;
 public class JTLFileParserUtil {
     JTLFileParser parser = new JTLFileParser();
 
-    public static void main (String[] args) {
+    public static void main(String[] args) {
         try {
             JTLFileParserUtil mainObj = new JTLFileParserUtil();
             mainObj.instanceMain(args);
-        } catch ( Exception exc ) {
+        } catch (Exception exc) {
             exc.printStackTrace();
         }
     }
 
-    public void instanceMain (String[] args) throws Exception {
+    public void instanceMain(String[] args) throws Exception {
         this.parser.setListener(new MyJtlParseListener());
 
-        for ( String oneArg : args ) {
+        for (String oneArg : args) {
             this.parser.parse(oneArg);
         }
     }
@@ -52,18 +52,18 @@ public class JTLFileParserUtil {
 
             List<Sample> subSamples = fullSample.getSubSamples();
             int numSubSample;
-            if ( subSamples == null ) {
+            if (subSamples == null) {
                 numSubSample = 0;
             } else {
                 numSubSample = subSamples.size();
             }
             System.out.print(numSubSample);
 
-            if ( fullSample.isFailure() ) {
+            if (fullSample.isFailure()) {
                 System.out.print(" *FAIL*");
             }
 
-            if ( fullSample.isExecError() ) {
+            if (fullSample.isExecError()) {
                 System.out.print(" *ERROR*");
             }
 

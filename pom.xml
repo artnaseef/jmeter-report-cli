@@ -65,7 +65,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                          <mainClass>com.artnaseef.jmeter.report.cli.ReportLauncher</mainClass>
+                            <mainClass>com.artnaseef.jmeter.report.cli.ReportLauncher</mainClass>
                         </manifest>
                     </archive>
                     <descriptorRefs>

@@ -83,11 +83,11 @@ public class Sample {
     public void addAssertion(Assertion assertion) {
         this.assertions.add(assertion);
 
-        if ( assertion.isAssertionError() ) {
+        if (assertion.isAssertionError()) {
             this.execError = true;
         }
 
-        if ( assertion.isAssertionFailure() ) {
+        if (assertion.isAssertionFailure()) {
             this.failure = true;
         }
     }
@@ -99,11 +99,11 @@ public class Sample {
     public void addSubSample(Sample subSample) {
         this.subSamples.add(subSample);
 
-        if ( subSample.isExecError() ) {
+        if (subSample.isExecError()) {
             this.execError = true;
         }
 
-        if ( subSample.isFailure() ) {
+        if (subSample.isFailure()) {
             this.failure = true;
         }
     }

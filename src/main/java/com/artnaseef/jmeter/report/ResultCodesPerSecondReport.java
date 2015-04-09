@@ -294,19 +294,19 @@ public class ResultCodesPerSecondReport implements LaunchableReport {
             processSubSamples(fullSample);
         }
 
-        protected long processSubSamples (Sample topLevelSample) {
+        protected long processSubSamples(Sample topLevelSample) {
             int result = 0;
 
             List<Sample> subSamples = topLevelSample.getSubSamples();
-            if ( ( subSamples != null ) && ( ! subSamples.isEmpty() ) ) {
-                for ( Sample oneSub : subSamples ) {
+            if ((subSamples != null) && (!subSamples.isEmpty())) {
+                for (Sample oneSub : subSamples) {
                     processSubSamples(oneSub);
                 }
             } else {
                 addSample(topLevelSample);
             }
 
-            return  result;
+            return result;
         }
     }
 }

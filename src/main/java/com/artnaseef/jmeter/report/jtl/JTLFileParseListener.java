@@ -25,5 +25,5 @@ public interface JTLFileParseListener {
      *
      * @param fullSample
      */
-    void    onSample(Sample fullSample);
+    void onSample(Sample fullSample);
 }

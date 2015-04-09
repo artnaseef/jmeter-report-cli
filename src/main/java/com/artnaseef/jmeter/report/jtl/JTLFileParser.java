@@ -52,7 +52,7 @@ public class JTLFileParser {
         parser.parse(uri, handler);
     }
 
-    protected void  notifyListenerOfSample (Sample sample) {
+    protected void notifyListenerOfSample(Sample sample) {
         this.listener.onSample(sample);
     }
 
@@ -77,13 +77,13 @@ public class JTLFileParser {
             if (qName.equals("sample") || qName.equals("httpSample")) {
                 Sample sample = this.decodeSample(uri, localName, qName, attributes);
                 this.currentSampleStack.push(sample);
-            } else if ( qName.equals("assertionResult") ) {
+            } else if (qName.equals("assertionResult")) {
                 this.assertion = new Assertion();
                 this.assertionLevel = level;
-            } else if ( qName.equals("name") || qName.equals("failure") || qName.equals("error") ||
-                    qName.equals("failureMessage") ) {
+            } else if (qName.equals("name") || qName.equals("failure") || qName.equals("error") ||
+                    qName.equals("failureMessage")) {
 
-                if ( this.level == this.assertionLevel + 1 ) {
+                if (this.level == this.assertionLevel + 1) {
                     this.needCharacters = true;
                 }
             }
@@ -93,48 +93,48 @@ public class JTLFileParser {
 
         @Override
         public void characters(char[] ch, int start, int length) throws SAXException {
-            if ( this.needCharacters ) {
+            if (this.needCharacters) {
                 this.characterBuffer.append(ch, start, length);
             }
         }
 
         @Override
         public void endElement(String uri, String localName, String qName) throws SAXException {
-            if ( qName.equals("sample") || qName.equals("httpSample") ) {
+            if (qName.equals("sample") || qName.equals("httpSample")) {
                 Sample finishedSample = this.currentSampleStack.pop();
 
-                if ( this.currentSampleStack.isEmpty() ) {
+                if (this.currentSampleStack.isEmpty()) {
                     // Finished a top-level sample
                     notifyListenerOfSample(finishedSample);
                 } else {
                     this.currentSampleStack.peekLast().addSubSample(finishedSample);
                 }
-            } else if ( qName.equals("assertionResult") ) {
-                if ( this.currentSampleStack.size() > 0 ) {
+            } else if (qName.equals("assertionResult")) {
+                if (this.currentSampleStack.size() > 0) {
                     currentSampleStack.getLast().addAssertion(this.assertion);
                 }
 
                 this.assertion = null;
-            } else if ( qName.equals("name") ) {
-                if ( this.level == this.assertionLevel + 1 ) {
+            } else if (qName.equals("name")) {
+                if (this.level == this.assertionLevel + 1) {
                     this.assertion.setName(this.characterBuffer.toString());
                 }
-            } else if ( qName.equals("failure") ) {
-                if ( this.level == this.assertionLevel + 2 ) {
+            } else if (qName.equals("failure")) {
+                if (this.level == this.assertionLevel + 2) {
                     boolean failureInd = this.decodeBoolean(this.characterBuffer.toString(),
                             this.assertion.isAssertionFailure());
 
                     this.assertion.setAssertionFailure(failureInd);
                 }
-            } else if ( qName.equals("error") ) {
-                if ( this.level == this.assertionLevel + 2 ) {
+            } else if (qName.equals("error")) {
+                if (this.level == this.assertionLevel + 2) {
                     boolean failureInd = this.decodeBoolean(this.characterBuffer.toString(),
                             this.assertion.isAssertionError());
 
                     this.assertion.setAssertionError(failureInd);
                 }
-            } else if ( qName.equals("failureMessage") ) {
-                if ( this.level == this.assertionLevel + 1 ) {
+            } else if (qName.equals("failureMessage")) {
+                if (this.level == this.assertionLevel + 1) {
                     this.assertion.setFailureMessage(this.characterBuffer.toString());
                 }
             }
@@ -146,7 +146,7 @@ public class JTLFileParser {
         protected Sample decodeSample(String uri, String localName, String qName, Attributes attributes) {
             Sample result;
 
-            if ( qName.equals("httpSample") ) {
+            if (qName.equals("httpSample")) {
                 result = new HttpSample();
             } else {
                 result = new Sample();
@@ -156,7 +156,7 @@ public class JTLFileParser {
             result.setTimestamp(decodeLong(attributes.getValue("ts"), -1));
             result.setResultCode(decodeResultCodeString(attributes.getValue("rc")));
 
-            return  result;
+            return result;
         }
 
         protected int decodeResultCodeString(String rcString) {
@@ -170,27 +170,27 @@ public class JTLFileParser {
             return result;
         }
 
-        protected long decodeLong (String value, long defaultValue) {
+        protected long decodeLong(String value, long defaultValue) {
             long result;
             try {
                 result = Long.valueOf(value);
-            } catch ( Exception exc ) {
+            } catch (Exception exc) {
                 result = defaultValue;
             }
 
-            return  result;
+            return result;
         }
 
-        protected boolean decodeBoolean (String value, boolean defaultValue) {
+        protected boolean decodeBoolean(String value, boolean defaultValue) {
             boolean result;
 
             try {
                 result = Boolean.valueOf(value);
-            } catch ( Exception exc ) {
+            } catch (Exception exc) {
                 result = defaultValue;
             }
 
-            return  result;
+            return result;
         }
     }
 }
