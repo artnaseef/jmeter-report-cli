@@ -13,24 +13,40 @@
  */
 package com.artnaseef.jmeter.report.cli;
 
+import com.artnaseef.jmeter.report.FeedableReport;
 import com.artnaseef.jmeter.report.LaunchableReport;
+import com.artnaseef.jmeter.report.SampleSource;
+import com.artnaseef.jmeter.report.jtl.impl.JTLFileSampleSource;
 import com.artnaseef.jmeter.report.registry.GlobalReportTypeRegistry;
 import com.artnaseef.jmeter.report.registry.ReportTypeRegistry;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
 
+import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Properties;
 import java.util.TreeSet;
 
 /**
  * Created by art on 4/7/15.
  */
 public class ReportLauncher {
-//  private OptionParser optionParser;
-
     private ReportTypeRegistry registry = GlobalReportTypeRegistry.get();
 
+    public static final String PROPERTY_DETAIL_FILE_NAME = "detailFileName";
+    public static final String PROPERTY_CHART_WIDTH = "chartWidth";
+    public static final String PROPERTY_CHART_HEIGHT = "chartHeight";
+    public static final String PROPERTY_TIME_SLOT_SIZE = "timeSlotSize";
+    public static final String PROPERTY_OUTPUT_FILENAME = "outputFilename";
+
+    private OptionParser optionParser;
+
     private String reportType;
+    private Properties reportProperties;
+
+    private SampleSource sampleSource;
 
     public static void main(String[] args) {
         ReportLauncher mainObj = new ReportLauncher();
@@ -40,6 +56,8 @@ public class ReportLauncher {
 
     public void instanceMain(String[] args) {
         try {
+            this.reportProperties = new Properties();
+
             List<?> nonOptionArgs = this.parseCommandLine(args);
 
             if (nonOptionArgs.size() < 1) {
@@ -49,36 +67,133 @@ public class ReportLauncher {
 
             this.reportType = nonOptionArgs.get(0).toString();
 
-            LaunchableReport report = this.registry.getReportType(reportType);
+            FeedableReport report = this.registry.getReportType(reportType);
+
             if (report == null) {
                 this.printUsage(System.err);
-
-                this.printKnownReportTypes(System.err);
-
                 System.exit(1);
             }
 
-            String[] reportArgs = new String[nonOptionArgs.size() - 1];
             int cur = 1;
             while (cur < nonOptionArgs.size()) {
-                reportArgs[cur - 1] = nonOptionArgs.get(cur).toString();
+                String uri = nonOptionArgs.get(cur).toString();
+                this.launchConfiguredReport(reportType, uri);
+
                 cur++;
             }
-
-            report.launchReport(reportArgs);
         } catch (Exception exc) {
             exc.printStackTrace();
         }
     }
 
+    public void launchReport (String reportType, String[] args) throws Exception {
+        FeedableReport report = this.registry.getReportType(reportType);
+
+        if (report == null) {
+            this.printUsage(System.err);
+            System.exit(1);
+        }
+
+        this.launchReport(report, args);
+    }
+
+    public void launchReport (FeedableReport report, String[] args) throws Exception {
+        List<?> nonOptionArgs = this.parseCommandLine(args);
+
+        int cur = 1;
+        while (cur < nonOptionArgs.size()) {
+            String uri = nonOptionArgs.get(cur).toString();
+            this.launchConfiguredReport(reportType, uri);
+
+            cur++;
+        }
+    }
+
+    protected void launchConfiguredReport (String reportType, String uri) throws Exception {
+        FeedableReport report = this.registry.getReportType(reportType);
+
+        if (report == null) {
+            this.printUsage(System.err);
+            System.exit(1);
+        }
+
+        this.sampleSource = new JTLFileSampleSource(uri);
+
+        report.onFeedStart(uri, reportProperties);
+        this.sampleSource.execute(report);
+        report.onFeedComplete();
+    }
+
     protected List<?> parseCommandLine(String[] args) throws Exception {
-        return Arrays.asList(args);
+        this.optionParser = new OptionParser("hd:H:o:s:W:");
+
+        this.optionParser.accepts("h", "display this usage");
+
+        this.optionParser.accepts("d", "generate detailed sample output")
+                .withRequiredArg().ofType(String.class)
+                .describedAs("filename");
+
+        this.optionParser.accepts("H", "height of the generated report")
+                .withRequiredArg().ofType(Integer.class);
+
+        this.optionParser.accepts("o", "output report filename")
+                .withRequiredArg().ofType(String.class)
+                .describedAs("filename");
+
+        this.optionParser.accepts("s", "slot size, in milliseconds")
+                .withRequiredArg().ofType(Long.class);
+
+        this.optionParser.accepts("W", "width of the generated report")
+                .withRequiredArg().ofType(Integer.class);
+
+        try {
+            OptionSet options = optionParser.parse(args);
+
+            if (options.has("h")) {
+                this.printUsage(System.out);
+                System.exit(0);
+            }
+
+            if (options.has("d")) {
+                this.reportProperties.put(PROPERTY_DETAIL_FILE_NAME, (String) options.valueOf("d"));
+            }
+
+            if (options.has("H")) {
+                this.reportProperties.put(PROPERTY_CHART_HEIGHT, (Integer) options.valueOf("H"));
+            }
+
+            if (options.has("o")) {
+                this.reportProperties.put(PROPERTY_OUTPUT_FILENAME, (String) options.valueOf("o"));
+            }
+
+            if (options.has("s")) {
+                this.reportProperties.put(PROPERTY_TIME_SLOT_SIZE, (Long) options.valueOf("s"));
+            }
+
+            if (options.has("W")) {
+                this.reportProperties.put(PROPERTY_CHART_WIDTH, (Integer) options.valueOf("W"));
+            }
+
+            return options.nonOptionArguments();
+        } catch (Exception exc) {
+            this.printUsage(System.err);
+            System.err.println();
+
+            throw exc;
+        }
     }
 
     protected void printUsage(PrintStream out) {
-        out.println("Usage: ReportLauncher [options] <report-type> ...");
+        out.println("Usage: HitsPerSecond [options] <source-url>");
 
-        out.println();
+        try {
+            optionParser.printHelpOn(out);
+
+            out.println();
+            this.printKnownReportTypes(out);
+        } catch (IOException e) {
+            // Ignore this one - if help can't be printed, what's left to do?
+        }
     }
 
     protected void printKnownReportTypes(PrintStream out) {

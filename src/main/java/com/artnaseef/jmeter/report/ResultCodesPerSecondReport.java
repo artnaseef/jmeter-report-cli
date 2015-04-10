@@ -13,8 +13,7 @@
  */
 package com.artnaseef.jmeter.report;
 
-import com.artnaseef.jmeter.report.jtl.JTLFileParseListener;
-import com.artnaseef.jmeter.report.jtl.JTLFileParser;
+import com.artnaseef.jmeter.report.cli.ReportLauncher;
 import com.artnaseef.jmeter.report.jtl.model.Sample;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.JFreeChart;
@@ -22,25 +21,17 @@ import org.jfree.chart.plot.PlotOrientation;
 import org.jfree.chart.util.ExportUtils;
 import org.jfree.data.xy.XYSeries;
 import org.jfree.data.xy.XYSeriesCollection;
-import org.xml.sax.SAXException;
 
 import java.io.File;
-import java.io.IOException;
 import java.io.PrintStream;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
-
-import javax.xml.parsers.ParserConfigurationException;
+import java.util.*;
 
 import joptsimple.OptionParser;
-import joptsimple.OptionSet;
 
 /**
  * Created by art on 4/7/15.
  */
-public class ResultCodesPerSecondReport implements LaunchableReport {
+public class ResultCodesPerSecondReport implements FeedableReport {
 
     private OptionParser optionParser;
 
@@ -50,11 +41,10 @@ public class ResultCodesPerSecondReport implements LaunchableReport {
     private int reportWidth = 1000;
     private int reportHeight = 750;
 
-    private long sampleCount;
     private XYSeriesCollection dataset;
     private JFreeChart chart;
-    private List<XYSeries> hitsSeries;
-    private Map<Integer, Map<Long, Long>> resultCodesPerSecond;
+    private List<XYSeries> chartSeries;
+    private Map<Integer, Map<Long, Long>> samplesByReportCode;
 
     private double secPerSample;
     private String yAxisLabel = "Seconds";
@@ -66,57 +56,53 @@ public class ResultCodesPerSecondReport implements LaunchableReport {
 
     private PrintStream detailFileWriter;
 
-    private JTLFileParser jtlFileParser;
+    private String feedUri;
 
     public static void main(String[] args) {
         ResultCodesPerSecondReport mainObj = new ResultCodesPerSecondReport();
 
-        mainObj.instanceMain(args);
-    }
-
-    public ResultCodesPerSecondReport() {
-        this.jtlFileParser = new JTLFileParser();
-        this.jtlFileParser.setListener(new MyJTLParseListener());
-    }
-
-    public void instanceMain(String[] args) {
         try {
-            this.launchReport(args);
+            ReportLauncher launcher = new ReportLauncher();
+            launcher.launchReport(mainObj, args);
         } catch (Exception exc) {
             exc.printStackTrace();
         }
     }
 
     @Override
-    public void launchReport(String[] args) throws Exception {
-        List<?> nonOptionArgs = this.parseCommandLine(args);
-
-        this.dataset = new XYSeriesCollection();
-
-        if (nonOptionArgs.size() < 1) {
-            this.printUsage(System.err);
-            System.exit(1);
-        }
-        if (this.detailOutputFile != null) {
-            this.detailFileWriter = new PrintStream(this.detailOutputFile);
-        }
-
-        for (Object oneSource : nonOptionArgs) {
-            this.generateReportForSource(oneSource.toString());
+    public void onSample(Sample topLevelSample) throws Exception {
+        List<Sample> subSamples = topLevelSample.getSubSamples();
+        if ((subSamples != null) && (!subSamples.isEmpty())) {
+            for (Sample oneSub : subSamples) {
+                this.onSample(oneSub);
+            }
+        } else {
+            this.addConcreteSample(topLevelSample);
         }
     }
 
-    protected void generateReportForSource(String uri) throws Exception {
-        this.hitsSeries = new LinkedList<>();
-        this.resultCodesPerSecond = new TreeMap<>();
+    @Override
+    public void onFeedStart(String uri, Properties reportProperties) throws Exception {
+        this.feedUri = uri;
 
-        this.parseJtlFile(uri);
+        this.extractReportProperties(reportProperties);
 
+        this.chartSeries = new LinkedList<>();
+        this.samplesByReportCode = new TreeMap<>();
+        this.dataset = new XYSeriesCollection();
+
+        if (this.detailOutputFile != null) {
+            this.detailFileWriter = new PrintStream(this.detailOutputFile);
+        }
+    }
+
+    @Override
+    public void onFeedComplete() throws Exception {
         this.calculateTimeAdjustments();
 
-        this.populateSeries(uri);
+        this.populateSeries(this.feedUri);
 
-        for (XYSeries oneSeries : this.hitsSeries) {
+        for (XYSeries oneSeries : this.chartSeries) {
             this.dataset.addSeries(oneSeries);
         }
 
@@ -126,72 +112,23 @@ public class ResultCodesPerSecondReport implements LaunchableReport {
                 new File(this.outputFile));
     }
 
-    protected List<?> parseCommandLine(String[] args) throws Exception {
-        this.optionParser = new OptionParser("hd:H:o:s:W:");
 
-        this.optionParser.accepts("h", "display this usage");
+    protected void extractReportProperties (Properties prop) {
+        this.detailOutputFile = prop.getProperty(ReportLauncher.PROPERTY_DETAIL_FILE_NAME);
 
-        this.optionParser.accepts("d", "generate detailed sample output")
-                .withRequiredArg().ofType(String.class)
-                .describedAs("filename");
-
-        this.optionParser.accepts("H", "height of the generated report")
-                .withRequiredArg().ofType(Integer.class);
-
-        this.optionParser.accepts("o", "output report filename (default = " + this.outputFile + ")")
-                .withRequiredArg().ofType(String.class)
-                .describedAs("filename");
-
-        this.optionParser.accepts("s", "slot size, in milliseconds")
-                .withRequiredArg().ofType(Long.class);
-
-        this.optionParser.accepts("W", "width of the generated report")
-                .withRequiredArg().ofType(Integer.class);
-
-        try {
-            OptionSet options = optionParser.parse(args);
-
-            if (options.has("h")) {
-                this.printUsage(System.out);
-                System.exit(0);
-            }
-
-            if (options.has("d")) {
-                this.detailOutputFile = (String) options.valueOf("d");
-            }
-
-            if (options.has("H")) {
-                this.reportHeight = (Integer) options.valueOf("H");
-            }
-
-            if (options.has("o")) {
-                this.outputFile = (String) options.valueOf("o");
-            }
-
-            if (options.has("s")) {
-                this.timeSlotSize = (Long) options.valueOf("s");
-            }
-
-            if (options.has("W")) {
-                this.reportWidth = (Integer) options.valueOf("W");
-            }
-
-            return options.nonOptionArguments();
-        } catch (Exception exc) {
-            this.printUsage(System.err);
-            System.err.println();
-
-            throw exc;
+        String out = prop.getProperty(ReportLauncher.PROPERTY_OUTPUT_FILENAME);
+        if ( out != null ) {
+            this.outputFile = out;
         }
-    }
 
-    protected void printUsage(PrintStream out) {
-        out.println("Usage: ResultCodesPerSecond [options] <source-url>");
-
-        try {
-            optionParser.printHelpOn(out);
-        } catch (IOException e) {
-            // Ignore this one - if help can't be printed, what's left to do?
+        Integer size;
+        size = (Integer) prop.get(ReportLauncher.PROPERTY_CHART_HEIGHT);
+        if (size != null) {
+            this.reportHeight = size;
+        }
+        size = (Integer) prop.get(ReportLauncher.PROPERTY_CHART_WIDTH);
+        if (size != null) {
+            this.reportWidth = size;
         }
     }
 
@@ -206,9 +143,9 @@ public class ResultCodesPerSecondReport implements LaunchableReport {
     }
 
     protected void populateSeries(String sourceUri) {
-        for (Map.Entry<Integer, Map<Long, Long>> entry : this.resultCodesPerSecond.entrySet()) {
+        for (Map.Entry<Integer, Map<Long, Long>> entry : this.samplesByReportCode.entrySet()) {
             XYSeries rcSeries = new XYSeries(Integer.toString(entry.getKey()));
-            this.hitsSeries.add(rcSeries);
+            this.chartSeries.add(rcSeries);
 
             for (Map.Entry<Long, Long> hitCountSeconds : entry.getValue().entrySet()) {
                 long xPoint = this.calculateXAxisOffset(hitCountSeconds.getKey());
@@ -240,18 +177,12 @@ public class ResultCodesPerSecondReport implements LaunchableReport {
         );
     }
 
-    protected void parseJtlFile(String uri) throws ParserConfigurationException, SAXException, IOException {
-        this.jtlFileParser.parse(uri);
-
-        System.out.println("sample-count=" + this.sampleCount);
-    }
-
-    protected void addSample(Sample oneSample) {
-        Map<Long, Long> slotSamples = this.resultCodesPerSecond.get(oneSample.getResultCode());
+    protected void addConcreteSample(Sample oneSample) {
+        Map<Long, Long> slotSamples = this.samplesByReportCode.get(oneSample.getResultCode());
 
         if (slotSamples == null) {
             slotSamples = new TreeMap<>();
-            this.resultCodesPerSecond.put(oneSample.getResultCode(), slotSamples);
+            this.samplesByReportCode.put(oneSample.getResultCode(), slotSamples);
         }
 
         long newCount = 1;
@@ -263,7 +194,6 @@ public class ResultCodesPerSecondReport implements LaunchableReport {
         }
 
         slotSamples.put(timeStampSlot, newCount);
-        this.sampleCount++;
 
         if ((this.startTimestampSlot == -1) || (timeStampSlot < this.startTimestampSlot)) {
             this.startTimestampSlot = timeStampSlot;
@@ -282,27 +212,5 @@ public class ResultCodesPerSecondReport implements LaunchableReport {
         long result = timestampSlot - this.startTimestampSlot;
 
         return result;
-    }
-
-    protected class MyJTLParseListener implements JTLFileParseListener {
-        @Override
-        public void onSample(Sample fullSample) {
-            processSubSamples(fullSample);
-        }
-
-        protected long processSubSamples(Sample topLevelSample) {
-            int result = 0;
-
-            List<Sample> subSamples = topLevelSample.getSubSamples();
-            if ((subSamples != null) && (!subSamples.isEmpty())) {
-                for (Sample oneSub : subSamples) {
-                    processSubSamples(oneSub);
-                }
-            } else {
-                addSample(topLevelSample);
-            }
-
-            return result;
-        }
     }
 }

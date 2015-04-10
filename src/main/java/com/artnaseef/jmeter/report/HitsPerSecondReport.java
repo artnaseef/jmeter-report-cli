@@ -13,8 +13,7 @@
  */
 package com.artnaseef.jmeter.report;
 
-import com.artnaseef.jmeter.report.jtl.JTLFileParseListener;
-import com.artnaseef.jmeter.report.jtl.JTLFileParser;
+import com.artnaseef.jmeter.report.cli.ReportLauncher;
 import com.artnaseef.jmeter.report.jtl.model.Sample;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.JFreeChart;
@@ -22,27 +21,18 @@ import org.jfree.chart.plot.PlotOrientation;
 import org.jfree.chart.util.ExportUtils;
 import org.jfree.data.xy.XYSeries;
 import org.jfree.data.xy.XYSeriesCollection;
-import org.xml.sax.Attributes;
-import org.xml.sax.SAXException;
-import org.xml.sax.helpers.DefaultHandler;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
 
 import java.io.File;
-import java.io.IOException;
 import java.io.PrintStream;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.TreeMap;
-
-import javax.xml.parsers.ParserConfigurationException;
 
 /**
  * Created by art on 4/7/15.
  */
-public class HitsPerSecondReport implements LaunchableReport {
-
-    private OptionParser optionParser;
+public class HitsPerSecondReport implements FeedableReport {
 
     private String outputFile = "hitsPerSecond.png";
     private String detailOutputFile;
@@ -50,10 +40,9 @@ public class HitsPerSecondReport implements LaunchableReport {
     private int reportWidth = 1000;
     private int reportHeight = 750;
 
-    private long sampleCount;
     private XYSeriesCollection dataset;
     private JFreeChart chart;
-    private XYSeries hitsSeries;
+    private XYSeries chartSeries;
     private Map<Long, Long> hitsPerSecond;
 
     private long timeSlotSize = 1000; // In milliseconds
@@ -63,123 +52,69 @@ public class HitsPerSecondReport implements LaunchableReport {
 
     private PrintStream detailFileWriter;
 
-    private JTLFileParser jtlFileParser;
+    private String feedUri;
 
     public static void main(String[] args) {
         HitsPerSecondReport mainObj = new HitsPerSecondReport();
 
         try {
-            mainObj.launchReport(args);
+            ReportLauncher launcher = new ReportLauncher();
+            launcher.launchReport(mainObj, args);
         } catch (Exception exc) {
             exc.printStackTrace();
         }
     }
 
-    public HitsPerSecondReport() {
-        this.jtlFileParser = new JTLFileParser();
-        this.jtlFileParser.setListener(new MyJTLParseListener());
-    }
-
     @Override
-    public void launchReport(String[] args) throws Exception {
-        List<?> nonOptionArgs = this.parseCommandLine(args);
+    public void onFeedStart(String uri, Properties reportProperties) throws Exception {
+        this.feedUri = uri;
 
+        this.extractReportProperties(reportProperties);
+
+        this.chartSeries = new XYSeries("Hits");
         this.dataset = new XYSeriesCollection();
+        this.hitsPerSecond = new TreeMap<Long, Long>();
 
-        if (nonOptionArgs.size() < 1) {
-            this.printUsage(System.err);
-            System.exit(1);
-        }
         if (this.detailOutputFile != null) {
             this.detailFileWriter = new PrintStream(this.detailOutputFile);
         }
+    }
 
-        for (Object oneSource : nonOptionArgs) {
-            this.generateReportForSource(oneSource.toString());
+    @Override
+    public void onFeedComplete() throws Exception {
+        this.finishReport();
+    }
+
+    @Override
+    public void onSample(Sample topLevelSample) {
+        this.addSample(topLevelSample);
+    }
+
+    protected void extractReportProperties (Properties prop) {
+        this.detailOutputFile = prop.getProperty(ReportLauncher.PROPERTY_DETAIL_FILE_NAME);
+
+        String out = prop.getProperty(ReportLauncher.PROPERTY_OUTPUT_FILENAME);
+        if ( out != null ) {
+            this.outputFile = out;
+        }
+
+        Integer size;
+        size = (Integer) prop.get(ReportLauncher.PROPERTY_CHART_HEIGHT);
+        if (size != null) {
+            this.reportHeight = size;
+        }
+        size = (Integer) prop.get(ReportLauncher.PROPERTY_CHART_WIDTH);
+        if (size != null) {
+            this.reportWidth = size;
         }
     }
 
-    protected void generateReportForSource(String uri) throws Exception {
-        this.hitsSeries = new XYSeries("Hits");
-        this.hitsPerSecond = new TreeMap<Long, Long>();
-
-        this.parseJtlFile(uri);
-
-        this.populateSeries(uri);
-        this.dataset.addSeries(this.hitsSeries);
+    protected void finishReport() throws Exception {
+        this.populateSeries(this.feedUri);
+        this.dataset.addSeries(this.chartSeries);
         this.createChart();
 
-        ExportUtils.writeAsPNG(this.chart, this.reportWidth, this.reportHeight,
-                new File(this.outputFile));
-    }
-
-    protected List<?> parseCommandLine(String[] args) throws Exception {
-        this.optionParser = new OptionParser("hd:H:o:s:W:");
-
-        this.optionParser.accepts("h", "display this usage");
-
-        this.optionParser.accepts("d", "generate detailed sample output")
-                .withRequiredArg().ofType(String.class)
-                .describedAs("filename");
-
-        this.optionParser.accepts("H", "height of the generated report")
-                .withRequiredArg().ofType(Integer.class);
-
-        this.optionParser.accepts("o", "output report filename (default = " + this.outputFile + ")")
-                .withRequiredArg().ofType(String.class)
-                .describedAs("filename");
-
-        this.optionParser.accepts("s", "slot size, in milliseconds")
-                .withRequiredArg().ofType(Long.class);
-
-        this.optionParser.accepts("W", "width of the generated report")
-                .withRequiredArg().ofType(Integer.class);
-
-        try {
-            OptionSet options = optionParser.parse(args);
-
-            if (options.has("h")) {
-                this.printUsage(System.out);
-                System.exit(0);
-            }
-
-            if (options.has("d")) {
-                this.detailOutputFile = (String) options.valueOf("d");
-            }
-
-            if (options.has("H")) {
-                this.reportHeight = (Integer) options.valueOf("H");
-            }
-
-            if (options.has("o")) {
-                this.outputFile = (String) options.valueOf("o");
-            }
-
-            if (options.has("s")) {
-                this.timeSlotSize = (Long) options.valueOf("s");
-            }
-
-            if (options.has("W")) {
-                this.reportWidth = (Integer) options.valueOf("W");
-            }
-
-            return options.nonOptionArguments();
-        } catch (Exception exc) {
-            this.printUsage(System.err);
-            System.err.println();
-
-            throw exc;
-        }
-    }
-
-    protected void printUsage(PrintStream out) {
-        out.println("Usage: HitsPerSecond [options] <source-url>");
-
-        try {
-            optionParser.printHelpOn(out);
-        } catch (IOException e) {
-            // Ignore this one - if help can't be printed, what's left to do?
-        }
+        ExportUtils.writeAsPNG(this.chart, this.reportWidth, this.reportHeight, new File(this.outputFile));
     }
 
     protected void populateSeries(String sourceUri) {
@@ -187,7 +122,7 @@ public class HitsPerSecondReport implements LaunchableReport {
             long xPoint = this.calculateXAxisOffset(hitCountSeconds.getKey());
             long yPoint = hitCountSeconds.getValue();
 
-            this.hitsSeries.add(xPoint, yPoint);
+            this.chartSeries.add(xPoint, yPoint);
 
             if (this.detailFileWriter != null) {
                 this.detailFileWriter.println(sourceUri + "|" + hitCountSeconds.getKey() +
@@ -212,13 +147,18 @@ public class HitsPerSecondReport implements LaunchableReport {
         );
     }
 
-    protected void parseJtlFile(String uri) throws ParserConfigurationException, SAXException, IOException {
-        this.jtlFileParser.parse(uri);
-
-        System.out.println("sample-count=" + this.sampleCount);
+    protected void addSample(Sample sample) {
+        List<Sample> subSamples = sample.getSubSamples();
+        if ( ( subSamples != null ) && ( ! subSamples.isEmpty() ) ) {
+            for ( Sample oneSubSample : subSamples ) {
+                this.addSample(oneSubSample);
+            }
+        } else {
+            this.addHit(sample);
+        }
     }
 
-    protected void addSample(Sample sample) {
+    protected void addHit(Sample sample) {
         long newCount = 1;
         long timeStampSlot = normalizeTimestamp(sample.getTimestamp());
         Long existingCount = this.hitsPerSecond.get(timeStampSlot);
@@ -228,7 +168,6 @@ public class HitsPerSecondReport implements LaunchableReport {
         }
 
         this.hitsPerSecond.put(timeStampSlot, newCount);
-        this.sampleCount++;
 
         if ((this.startTimestampSlot == -1) || (timeStampSlot < this.startTimestampSlot)) {
             this.startTimestampSlot = timeStampSlot;
@@ -247,27 +186,5 @@ public class HitsPerSecondReport implements LaunchableReport {
         long result = timestampSlot - this.startTimestampSlot;
 
         return result;
-    }
-
-    protected class MyJTLParseListener implements JTLFileParseListener {
-        @Override
-        public void onSample(Sample fullSample) {
-            processSubSamples(fullSample);
-        }
-
-        protected long processSubSamples(Sample topLevelSample) {
-            int result = 0;
-
-            List<Sample> subSamples = topLevelSample.getSubSamples();
-            if ((subSamples != null) && (!subSamples.isEmpty())) {
-                for (Sample oneSub : subSamples) {
-                    processSubSamples(oneSub);
-                }
-            } else {
-                addSample(topLevelSample);
-            }
-
-            return result;
-        }
     }
 }

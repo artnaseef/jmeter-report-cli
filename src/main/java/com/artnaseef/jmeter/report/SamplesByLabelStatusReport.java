@@ -13,18 +13,23 @@
  */
 package com.artnaseef.jmeter.report;
 
+import com.artnaseef.jmeter.report.cli.ReportLauncher;
 import com.artnaseef.jmeter.report.jtl.JTLFileParseListener;
 import com.artnaseef.jmeter.report.jtl.JTLFileParser;
 import com.artnaseef.jmeter.report.jtl.model.Sample;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
+import org.jfree.data.xy.XYSeries;
+import org.jfree.data.xy.XYSeriesCollection;
 import org.xml.sax.SAXException;
 
 import javax.xml.parsers.ParserConfigurationException;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.io.PrintWriter;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.TreeMap;
 
 /**
@@ -34,138 +39,70 @@ import java.util.TreeMap;
  *
  * Created by art on 4/7/15.
  */
-public class SamplesByLabelStatusReport implements LaunchableReport {
+public class SamplesByLabelStatusReport implements FeedableReport {
 
-    private OptionParser optionParser;
-
-    private String outputFile = "samplesByLabelStatusReport.png";
-    private String detailOutputFile;
-
-    private int reportWidth = 1000;
-    private int reportHeight = 750;
-
-    private long sampleCount;
+    private String outputFile = "samplesByLabelStatusReport.txt";
     private Map<String, SampleStats> sampleStatsByLabel;
 
     private PrintStream detailFileWriter;
 
-    private JTLFileParser jtlFileParser;
+    private String feedUri;
 
     public static void main(String[] args) {
         SamplesByLabelStatusReport mainObj = new SamplesByLabelStatusReport();
 
-        mainObj.instanceMain(args);
-    }
-
-    public SamplesByLabelStatusReport() {
-        this.jtlFileParser = new JTLFileParser();
-        this.jtlFileParser.setListener(new MyJTLParseListener());
-    }
-
-    public void instanceMain(String[] args) {
         try {
-            this.launchReport(args);
+            ReportLauncher launcher = new ReportLauncher();
+            launcher.launchReport(mainObj, args);
         } catch (Exception exc) {
             exc.printStackTrace();
         }
     }
 
     @Override
-    public void launchReport(String[] args) throws Exception {
-        List<?> nonOptionArgs = this.parseCommandLine(args);
+    public void onFeedStart(String uri, Properties reportProperties) throws Exception {
+        this.feedUri = uri;
 
-        if (nonOptionArgs.size() < 1) {
-            this.printUsage(System.err);
-            System.exit(1);
-        }
-        if (this.detailOutputFile != null) {
-            this.detailFileWriter = new PrintStream(this.detailOutputFile);
-        }
+        this.extractReportProperties(reportProperties);
 
-        for (Object oneSource : nonOptionArgs) {
-            this.generateReportForSource(oneSource.toString());
-        }
+        this.sampleStatsByLabel = new TreeMap<>();
     }
 
-    protected void generateReportForSource(String uri) throws Exception {
-        this.sampleStatsByLabel = new TreeMap<>();
-
-        this.parseJtlFile(uri);
-
+    @Override
+    public void onFeedComplete() throws Exception {
         this.generateReport();
     }
 
-    protected List<?> parseCommandLine(String[] args) throws Exception {
-        this.optionParser = new OptionParser("hd:H:o:s:W:");
+    @Override
+    public void onSample(Sample topLevelSample) throws Exception {
+        this.addSample(topLevelSample);
+    }
 
-        this.optionParser.accepts("h", "display this usage");
-
-        this.optionParser.accepts("d", "generate detailed sample output")
-                .withRequiredArg().ofType(String.class)
-                .describedAs("filename");
-
-        this.optionParser.accepts("o", "output report filename (default = " + this.outputFile + ")")
-                .withRequiredArg().ofType(String.class)
-                .describedAs("filename");
-
-        try {
-            OptionSet options = optionParser.parse(args);
-
-            if (options.has("h")) {
-                this.printUsage(System.out);
-                System.exit(0);
-            }
-
-            if (options.has("d")) {
-                this.detailOutputFile = (String) options.valueOf("d");
-            }
-
-            if (options.has("o")) {
-                this.outputFile = (String) options.valueOf("o");
-            }
-
-            return options.nonOptionArguments();
-        } catch (Exception exc) {
-            this.printUsage(System.err);
-            System.err.println();
-
-            throw exc;
+    protected void extractReportProperties (Properties prop) {
+        String out = prop.getProperty(ReportLauncher.PROPERTY_OUTPUT_FILENAME);
+        if ( out != null ) {
+            this.outputFile = out;
         }
     }
 
-    protected void printUsage(PrintStream out) {
-        out.println("Usage: ResultCodesPerSecond [options] <source-url>");
-
-        try {
-            optionParser.printHelpOn(out);
-        } catch (IOException e) {
-            // Ignore this one - if help can't be printed, what's left to do?
-        }
-    }
-
-    protected void parseJtlFile(String uri) throws ParserConfigurationException, SAXException, IOException {
-        this.jtlFileParser.parse(uri);
-
-        System.out.println("sample-count=" + this.sampleCount);
-    }
-
-    protected void generateReport () {
+    protected void generateReport () throws Exception {
         SampleStats totals = new SampleStats();
+        try ( PrintWriter out = new PrintWriter(this.outputFile) ) {
+            out.println(this.formatHeader());
 
-        System.out.println(this.formatHeader());
+            for (Map.Entry<String, SampleStats> statEntry : this.sampleStatsByLabel.entrySet()) {
+                SampleStats stats = statEntry.getValue();
 
-        for ( Map.Entry<String, SampleStats> statEntry : this.sampleStatsByLabel.entrySet() ) {
-            SampleStats stats = statEntry.getValue();
+                totals.numSample += stats.numSample;
+                totals.numErrorOrFailure += stats.numErrorOrFailure;
+                totals.numError += stats.numError;
+                totals.numFailure += stats.numFailure;
 
-            totals.numSample += stats.numSample;
-            totals.numErrorOrFailure += stats.numErrorOrFailure;
-            totals.numError += stats.numError;
-            totals.numFailure += stats.numFailure;
+                out.println(formatStats(statEntry.getKey(), stats));
+            }
 
-            System.out.println(formatStats(statEntry.getKey(), stats));
+            out.println(formatStats("TOTALS", totals));
         }
-
-        System.out.println(formatStats("TOTALS", totals));
     }
 
     protected String formatHeader () {
@@ -190,7 +127,9 @@ public class SamplesByLabelStatusReport implements LaunchableReport {
         return  result;
     }
 
-    protected void addSample(Sample oneSample, boolean hasFailure) {
+    protected void addSample(Sample oneSample) {
+        boolean hasFailure = this.hasFailureSample(oneSample);
+
         SampleStats sampleStats = this.sampleStatsByLabel.get(oneSample.getLabel());
         if ( sampleStats == null ) {
             sampleStats = new SampleStats();
@@ -212,33 +151,24 @@ public class SamplesByLabelStatusReport implements LaunchableReport {
         }
     }
 
-    protected class MyJTLParseListener implements JTLFileParseListener {
-        @Override
-        public void onSample(Sample fullSample) {
-            boolean hasFailure = this.hasFailureSample(fullSample);
+    protected boolean hasFailureSample (Sample topLevelSample) {
+        int result = 0;
 
-            addSample(fullSample, hasFailure);
+        int rc = topLevelSample.getResultCode();
+        if ( ( ( rc / 100 ) != 2 ) && ( ( rc / 100 ) != 3 ) ) {
+            return  true;
         }
 
-        protected boolean hasFailureSample (Sample topLevelSample) {
-            int result = 0;
-
-            int rc = topLevelSample.getResultCode();
-            if ( ( ( rc / 100 ) != 2 ) && ( ( rc / 100 ) != 3 ) ) {
-                return  true;
-            }
-
-            List<Sample> subSamples = topLevelSample.getSubSamples();
-            if ((subSamples != null) && (!subSamples.isEmpty())) {
-                for (Sample oneSub : subSamples) {
-                    if ( hasFailureSample(oneSub) ) {
-                        return  true;
-                    }
+        List<Sample> subSamples = topLevelSample.getSubSamples();
+        if ((subSamples != null) && (!subSamples.isEmpty())) {
+            for (Sample oneSub : subSamples) {
+                if ( hasFailureSample(oneSub) ) {
+                    return  true;
                 }
             }
-
-            return false;
         }
+
+        return false;
     }
 
     protected class SampleStats {

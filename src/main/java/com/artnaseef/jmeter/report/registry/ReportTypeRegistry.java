@@ -14,6 +14,7 @@
 
 package com.artnaseef.jmeter.report.registry;
 
+import com.artnaseef.jmeter.report.FeedableReport;
 import com.artnaseef.jmeter.report.LaunchableReport;
 
 import java.util.Collections;
@@ -25,7 +26,7 @@ import java.util.Set;
  * Created by art on 4/8/15.
  */
 public class ReportTypeRegistry {
-    private Map<String, LaunchableReport> registeredReportTypes;
+    private Map<String, FeedableReport> registeredReportTypes;
     private Map<String, String> aliases;
 
     public ReportTypeRegistry() {
@@ -33,7 +34,7 @@ public class ReportTypeRegistry {
         this.aliases = new HashMap<>();
     }
 
-    public void registerReportType(String typeName, LaunchableReport report) {
+    public void registerReportType(String typeName, FeedableReport report) {
         this.registeredReportTypes.put(typeName, report);
     }
 
@@ -41,8 +42,8 @@ public class ReportTypeRegistry {
         this.aliases.put(aliasName, typeName);
     }
 
-    public LaunchableReport getReportType(String typeName) {
-        LaunchableReport result = this.registeredReportTypes.get(typeName);
+    public FeedableReport getReportType(String typeName) {
+        FeedableReport result = this.registeredReportTypes.get(typeName);
 
         if (result == null) {
             String unaliased = this.aliases.get(typeName);
