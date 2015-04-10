@@ -15,6 +15,7 @@
 package com.artnaseef.jmeter.report.registry;
 
 import com.artnaseef.jmeter.report.HitsPerSecondReport;
+import com.artnaseef.jmeter.report.MultipleReportGenerator;
 import com.artnaseef.jmeter.report.ResultCodesPerSecondReport;
 import com.artnaseef.jmeter.report.SamplesByLabelStatusReport;
 
@@ -41,6 +42,12 @@ public abstract class GlobalReportTypeRegistry {
         registry.registerReportType("SamplesByLabelStatus", new SamplesByLabelStatusReport());
         registry.registerAlias("sbls", "SamplesByLabelStatus");
         registry.registerAlias("samples-by-label-status", "SamplesByLabelStatus");
+
+
+        // Register the multiple-report generator
+        registry.registerReportType("MultipleReportGenerator", new MultipleReportGenerator());
+        registry.registerAlias("multi", "MultipleReportGenerator");
+        registry.registerAlias("multiple-report-generator", "MultipleReportGenerator");
     }
 
     public static ReportTypeRegistry get() {

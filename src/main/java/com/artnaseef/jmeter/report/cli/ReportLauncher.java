@@ -125,9 +125,13 @@ public class ReportLauncher {
     }
 
     protected List<?> parseCommandLine(String[] args) throws Exception {
-        this.optionParser = new OptionParser("hd:H:o:s:W:");
+        this.optionParser = new OptionParser("hD:d:H:o:s:W:");
 
         this.optionParser.accepts("h", "display this usage");
+
+        this.optionParser.accepts("D", "report property")
+                .withRequiredArg().ofType(String.class)
+                .describedAs("property=value");
 
         this.optionParser.accepts("d", "generate detailed sample output")
                 .withRequiredArg().ofType(String.class)
@@ -152,6 +156,19 @@ public class ReportLauncher {
             if (options.has("h")) {
                 this.printUsage(System.out);
                 System.exit(0);
+            }
+
+            if (options.has("D")) {
+                for ( Object oneValue : options.valuesOf("D") ) {
+                    String valueString = oneValue.toString();
+                    String[] split = valueString.split("=", 2);
+
+                    if ( split.length == 2 ) {
+                        this.reportProperties.put(split[0], split[1]);
+                    } else {
+                        this.reportProperties.put(valueString, "");
+                    }
+                }
             }
 
             if (options.has("d")) {
