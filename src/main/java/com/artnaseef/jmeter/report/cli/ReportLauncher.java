@@ -40,6 +40,7 @@ public class ReportLauncher {
     public static final String PROPERTY_CHART_HEIGHT = "chartHeight";
     public static final String PROPERTY_TIME_SLOT_SIZE = "timeSlotSize";
     public static final String PROPERTY_OUTPUT_FILENAME = "outputFilename";
+    public static final String PROPERTY_MAX_SLOTS = "maxSlots";
 
     private OptionParser optionParser;
 
@@ -140,6 +141,9 @@ public class ReportLauncher {
         this.optionParser.accepts("H", "height of the generated report")
                 .withRequiredArg().ofType(Integer.class);
 
+        this.optionParser.accepts("M", "maximum slots")
+                .withRequiredArg().ofType(Integer.class);
+
         this.optionParser.accepts("o", "output report filename")
                 .withRequiredArg().ofType(String.class)
                 .describedAs("filename");
@@ -177,6 +181,10 @@ public class ReportLauncher {
 
             if (options.has("H")) {
                 this.reportProperties.put(PROPERTY_CHART_HEIGHT, (Integer) options.valueOf("H"));
+            }
+
+            if ( options.has("M") ) {
+                this.reportProperties.put(PROPERTY_MAX_SLOTS, (Integer) options.valueOf("M"));
             }
 
             if (options.has("o")) {

@@ -130,6 +130,11 @@ public class ResultCodesPerSecondReport implements FeedableReport {
         if (size != null) {
             this.reportWidth = size;
         }
+
+        Long slotSize = (Long) prop.get(ReportLauncher.PROPERTY_TIME_SLOT_SIZE);
+        if ( slotSize != null ) {
+            this.timeSlotSize = slotSize;
+        }
     }
 
     protected void calculateTimeAdjustments() {

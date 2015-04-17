@@ -17,6 +17,7 @@ package com.artnaseef.jmeter.report.registry;
 import com.artnaseef.jmeter.report.HitsPerSecondReport;
 import com.artnaseef.jmeter.report.MultipleReportGenerator;
 import com.artnaseef.jmeter.report.ResultCodesPerSecondReport;
+import com.artnaseef.jmeter.report.ResultCodesStackedReport;
 import com.artnaseef.jmeter.report.SamplesByLabelStatusReport;
 
 /**
@@ -43,6 +44,9 @@ public abstract class GlobalReportTypeRegistry {
         registry.registerAlias("sbls", "SamplesByLabelStatus");
         registry.registerAlias("samples-by-label-status", "SamplesByLabelStatus");
 
+        registry.registerReportType("ResultCodesStacked", new ResultCodesStackedReport());
+        registry.registerAlias("rcs", "ResultCodesStacked");
+        registry.registerAlias("result-codes-stacked", "ResultCodesStacked");
 
         // Register the multiple-report generator
         registry.registerReportType("MultipleReportGenerator", new MultipleReportGenerator());
