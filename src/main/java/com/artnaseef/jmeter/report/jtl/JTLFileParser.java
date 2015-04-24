@@ -61,7 +61,9 @@ public class JTLFileParser {
         if ( lowerCaseUri.endsWith(".gz") ) {
             parser.parse(new GZIPInputStream(openUriStream(uri)), handler);
         } else if ( lowerCaseUri.endsWith(".zip") ) {
-            parser.parse(new ZipInputStream(openUriStream(uri)), handler);
+            ZipInputStream zis = new ZipInputStream(openUriStream(uri));
+            zis.getNextEntry();
+            parser.parse(zis, handler);
         } else {
             parser.parse(uri, handler);
         }
