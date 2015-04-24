@@ -25,8 +25,14 @@ import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.ZipInputStream;
 
 /**
  * Created by art on 4/8/15.
@@ -42,14 +48,37 @@ public class JTLFileParser {
         this.listener = listener;
     }
 
-    public void parse(String uri) throws ParserConfigurationException, SAXException, IOException {
+    public void parse(String uri) throws ParserConfigurationException, SAXException, IOException, URISyntaxException {
         SAXParserFactory factory = SAXParserFactory.newInstance();
         SAXParser parser;
         SAXParseHandler handler = new SAXParseHandler();
 
         parser = factory.newSAXParser();
 
-        parser.parse(uri, handler);
+        // TODO: refactor so the input filestream is not created in the parser
+        // Support GZIP and ZIP files
+        String lowerCaseUri = uri.toLowerCase();
+        if ( lowerCaseUri.endsWith(".gz") ) {
+            parser.parse(new GZIPInputStream(openUriStream(uri)), handler);
+        } else if ( lowerCaseUri.endsWith(".zip") ) {
+            parser.parse(new ZipInputStream(openUriStream(uri)), handler);
+        } else {
+            parser.parse(uri, handler);
+        }
+    }
+
+    protected InputStream openUriStream (String uriString) throws URISyntaxException, IOException {
+        URI uri = new URI(uriString);
+
+        if ( ! uri.isAbsolute() ) {
+            if ( uriString.startsWith("/") ) {
+                uri = new URI("file://" + uriString);
+            } else {
+                uri = new URI("file:" + uriString);
+            }
+        }
+
+        return  uri.toURL().openStream();
     }
 
     protected void notifyListenerOfSample(Sample sample) {
