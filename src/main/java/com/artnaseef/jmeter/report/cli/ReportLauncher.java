@@ -21,6 +21,7 @@ import com.artnaseef.jmeter.report.registry.GlobalReportTypeRegistry;
 import com.artnaseef.jmeter.report.registry.ReportTypeRegistry;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
+import org.xml.sax.SAXParseException;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -48,6 +49,8 @@ public class ReportLauncher {
     private Properties reportProperties;
 
     private SampleSource sampleSource;
+
+    private boolean generateReportAfterParseException = false;
 
     public static void main(String[] args) {
         ReportLauncher mainObj = new ReportLauncher();
@@ -121,14 +124,26 @@ public class ReportLauncher {
         this.sampleSource = new JTLFileSampleSource(uri);
 
         report.onFeedStart(uri, reportProperties);
-        this.sampleSource.execute(report);
+
+        try {
+            this.sampleSource.execute(report);
+        } catch ( SAXParseException spExc ) {
+            if ( ! this.generateReportAfterParseException ) {
+                throw spExc;
+            }
+
+            System.err.println("warning: ignoring parse exception: " + spExc.getMessage());
+        }
+
         report.onFeedComplete();
     }
 
     protected List<?> parseCommandLine(String[] args) throws Exception {
-        this.optionParser = new OptionParser("hD:d:H:o:s:W:");
+        this.optionParser = new OptionParser("hcD:d:H:o:s:W:");
 
         this.optionParser.accepts("h", "display this usage");
+
+        this.optionParser.accepts("c", "continue generating report after parse exception");
 
         this.optionParser.accepts("D", "report property")
                 .withRequiredArg().ofType(String.class)
@@ -173,6 +188,10 @@ public class ReportLauncher {
                         this.reportProperties.put(valueString, "");
                     }
                 }
+            }
+
+            if ( options.has("c") ) {
+                this.generateReportAfterParseException = true;
             }
 
             if (options.has("d")) {
